@@ -1,7 +1,6 @@
 // Import necessary modules
 const pg = require('pg');
 const client = new pg.Client(process.env.DATABASE_URL || 'postgres://localhost/acme_Anime_Figures_db');
-const uuid = require('uuid');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const JWT = process.env.JWT || 'figures';
@@ -10,18 +9,18 @@ const JWT = process.env.JWT || 'figures';
 const createTables = async () => {
     const SQL = `
       -- Drop existing tables if they exist
-      DROP TABLE IF EXISTS admin;
+      DROP TABLE IF EXISTS admin CASCADE;
       DROP TABLE IF EXISTS adminuser;
-      DROP TABLE IF EXISTS users;
+      DROP TABLE IF EXISTS users CASCADE;
       DROP TABLE IF EXISTS user_address;
       DROP TABLE IF EXISTS user_payment;
   
-      DROP TABLE IF EXISTS products;
+      DROP TABLE IF EXISTS products CASCADE;
       DROP TABLE IF EXISTS product_categories;
       DROP TABLE IF EXISTS product_inventories;
       DROP TABLE IF EXISTS cart_items;
       DROP TABLE IF EXISTS order_items;
-      DROP TABLE IF EXISTS order_details;
+      DROP TABLE IF EXISTS order_details CASCADE;
       DROP TABLE IF EXISTS payment_details;
   
       -- Create admin table
@@ -109,7 +108,7 @@ const createTables = async () => {
       -- Create payment_details table
       CREATE TABLE payment_details (
         payment_detail_id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(user_id),
+        order_detail_id INT REFERENCES order_details(order_detail_id),
         payment_method VARCHAR(50) NOT NULL,
         amount DECIMAL(10, 2) NOT NULL
       );
@@ -343,14 +342,23 @@ const deleteCartItem = async (cartItemId) => {
     return response.rows[0]; 
 };
 
-// Function to delete a payment detail by ID
-const deletePaymentDetail = async (paymentDetailId) => {
-    const SQL = `
-      DELETE FROM payment_details WHERE payment_detail_id = $1 RETURNING *
-    `;
-    const response = await client.query(SQL, [paymentDetailId]);
-    return response.rows[0]; 
+// Function to delete user addresses
+const deleteUserAddress = async (userAddress) => {
+  const SQL = `
+    DELETE FROM user_address WHERE user_address_id = $1 RETURNING *
+  `;
+  const response = await client.query(SQL, [userAddress]);
+  return response.rows[0];
 };
+
+// Function to delete user payments
+  const deleteUserPayment = async (userPayment) => {
+    const SQL = `
+      DELETE FROM user_payment WHERE user_payment_id = $1 RETURNING *
+    `;
+    const response = await client.query(SQL, [userPayment]);
+    return response.rows[0];
+  };
 
 // Function to find a user using their token
 const findUserWithToken = async (token) => {
@@ -419,7 +427,8 @@ const authenticate = async ({ username, password }) => {
     fetchPaymentDetails,
     deleteProduct,
     deleteCartItem,
-    deletePaymentDetail,
+    deleteUserAddress,
+    deleteUserPayment,
     findUserWithToken,
     authenticate
   };
