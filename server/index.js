@@ -2,6 +2,7 @@
 const {
   client,
   createTables,
+  createAdminUser,
   createUser,
   createUserAddress,
   createUserPayment,
@@ -12,7 +13,6 @@ const {
   createOrderItem,
   createOrderDetail,
   createPaymentDetail,
-  fetchAdmins,
   fetchAdminUsers,
   fetchUsers,
   fetchUserAddresses,
@@ -37,8 +37,6 @@ app.use(express.json());
 
 // Serve static files for deployment
 const path = require('path');
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, '../client/dist/index.html')));
-app.use('/assets', express.static(path.join(__dirname, '../client/dist/assets')));
 
 // Middleware to check if the user is logged in
 const isLoggedIn = async (req, res, next) => {
@@ -49,9 +47,20 @@ const isLoggedIn = async (req, res, next) => {
     next(ex);
   }
 };
+const isAdmin = async (req, res, next) => {
+  try {
+    req.user = await findUserWithToken(req.headers.authorization);
+    if (req.user.role === 'admin') {
+      next();
+    } else {
+      res.status(401).send('Unauthorized');
+    }
+  } catch (ex) {
+    next(ex);
+  }
+};
 
-
-// Authentication endpoint for registering a new user
+// Authentication endpoints
 app.post('/api/auth/register', async (req, res, next) => {
   try {
     res.send(await createUser(req.body));
@@ -60,7 +69,6 @@ app.post('/api/auth/register', async (req, res, next) => {
   }
 });
 
-// Authentication endpoint for user login
 app.post('/api/auth/login', async (req, res, next) => {
   try {
     res.send(await authenticate(req.body));
@@ -69,7 +77,6 @@ app.post('/api/auth/login', async (req, res, next) => {
   }
 });
 
-// Endpoint to get user information based on the token
 app.get('/api/auth/me', isLoggedIn, (req, res, next) => {
   try {
     res.send(req.user);
@@ -78,16 +85,8 @@ app.get('/api/auth/me', isLoggedIn, (req, res, next) => {
   }
 });
 
-// Endpoint to get all admins
-app.get('/api/admins', async (req, res, next) => {
-  try {
-    res.send(await fetchAdmins());
-  } catch (ex) {
-    next(ex);
-  }
-});
+// Admin endpoints
 
-// Endpoint to get all admin users
 app.get('/api/adminusers', async (req, res, next) => {
   try {
     res.send(await fetchAdminUsers());
@@ -96,8 +95,45 @@ app.get('/api/adminusers', async (req, res, next) => {
   }
 });
 
+app.put('/api/admin/users', isAdmin, async (req, res, next) => {
+  try {
+    res.send(await fetchUser(req.params.userId));
+  } catch (ex) {
+    next(ex);
+  }
+});
+app.get('/api/admin/products', isAdmin, async (req, res, next) => {
+  try {
+    res.send(await fetchProducts());
+  } catch (ex) {
+    next(ex);
+  }
+});
+app.post('/api/admin/products', isAdmin, async (req,res, next) => {
+  try {
+    res.send(await createProduct(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
 
-// Endpoint to create a new user
+app.put('/api/admin/products/:productId', isAdmin, async (req,res, next) => {
+  try {
+    res.send(await fetchProduct(req.params.productId, req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.delete('/api/admin/products/:productId', isAdmin, async (req,res, next) => {
+  try {
+    res.send(await deleteProduct(req.params.productId));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// User endpoints
 app.post('/api/users', async (req, res, next) => {
   try {
     res.status(201).send(await createUser(req.body));
@@ -106,7 +142,6 @@ app.post('/api/users', async (req, res, next) => {
   }
 });
 
-// Endpoint to create a new user address
 app.post('/api/users/:userId/addresses', async (req, res, next) => {
   try {
     res.status(201).send(await createUserAddress({ user_id: req.params.userId, address: req.body.address }));
@@ -115,7 +150,6 @@ app.post('/api/users/:userId/addresses', async (req, res, next) => {
   }
 });
 
-// Endpoint to create a new user payment method
 app.post('/api/users/:userId/payments', async (req, res, next) => {
   try {
     res.status(201).send(await createUserPayment({ user_id: req.params.userId, payment_method: req.body.payment_method }));
@@ -124,7 +158,6 @@ app.post('/api/users/:userId/payments', async (req, res, next) => {
   }
 });
 
-// Endpoint to get all users
 app.get('/api/users', async (req, res, next) => {
   try {
     res.send(await fetchUsers());
@@ -133,7 +166,6 @@ app.get('/api/users', async (req, res, next) => {
   }
 });
 
-// Endpoint to get user addresses
 app.get('/api/users/:userId/addresses', async (req, res, next) => {
   try {
     res.send(await fetchUserAddresses(req.params.userId));
@@ -142,7 +174,6 @@ app.get('/api/users/:userId/addresses', async (req, res, next) => {
   }
 });
 
-// Endpoint to get  user payment methods
 app.get('/api/users/:userId/payments', async (req, res, next) => {
   try {
     res.send(await fetchUserPayments(req.params.userId));
@@ -151,140 +182,7 @@ app.get('/api/users/:userId/payments', async (req, res, next) => {
   }
 });
 
-// Endpoint to create a new product
-app.post('/api/products', async (req, res, next) => {
-  try {
-    res.status(201).send(await createProduct(req.body));
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to fetch products
-app.get('/api/products', async (req, res, next) => {
-  try {
-    res.send(await fetchProducts());
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to create a new product category
-app.post('/api/productcategories', async (req, res, next) => {
-  try {
-    res.status(201).send(await createProductCategory(req.body));
-  } catch (ex) {
-    next(ex);
-  }
-});
-//Endpoin to fetcch catergory
-app.get('/api/productcategories', async (req, res, next) => {
-  try {
-    res.send(await fetchProductCategories());
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to create a new product inventory
-app.post('/api/productinventories', async (req, res, next) => {
-  try {
-    res.status(201).send(await createProductInventory(req.body));
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to fetch inventory
-app.get('/api/productinventories', async (req, res, next) => {
-  try {
-    res.send(await fetchProductInventories());
-  } catch (ex) {
-    next(ex);
-  }
-});
-// Endpoint to create a new cart item
-app.post('/api/cartitems', async (req, res, next) => {
-  try {
-    res.status(201).send(await createCartItem(req.body));
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to fetch cart items
-app.get('/api/cartitems', async (req, res, next) => {
-  try {
-    res.send(await fetchCartItems());
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to delete a cart item
-app.delete('/api/cartitems/:id', async (req, res, next) => {
-  try {
-    await deleteCartItem(req.params.id);
-    res.sendStatus(204);
-  } catch (ex) {
-    next(ex);
-  }
-});
-// Endpoint to create order item
-app.post('/api/orderitems', async (req, res, next) => {
-  try {
-    res.status(201).send(await createOrderItem(req.body));
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to get all order items
-app.get('/api/orderitems', async (req, res, next) => {
-  try {
-    res.send(await fetchOrderItems());
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to get payment details
-app.get('/api/orderitems/orderdetails/paymentdetails', async (req, res, next) => {
-  try {
-    res.send(await fetchPaymentDetails());
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to create order details
-app.post('/api/orderitems/orderdetails', async (req, res, next) => {
-  try {
-    res.status(201).send(await createOrderDetails(req.body));
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to get order details
-app.get('/api/orderitems/orderdetails', async (req, res, next) => {
-  try {
-    res.send(await fetchOrderDetails());
-  } catch (ex) {
-    next(ex);
-  }
-});
-
-// Endpoint to create payment details
-app.post('/api/orderitems/orderdetails/paymentdetails', async (req, res, next) => {
-  try {
-    res.status(201).send(await createPaymentDetails(req.body));
-  } catch (ex) {
-    next(ex);
-  }
-});
-// Endpoint to delete address
-app.delete('/api/users/:userId/useraddress', async (req, res, next) => {
+app.delete('/api/users/:userId/useraddress/:addressId', async (req, res, next) => {
   try {
     await deleteUserAddress(req.params.userId, req.params.addressId);
     res.sendStatus(204);
@@ -293,8 +191,7 @@ app.delete('/api/users/:userId/useraddress', async (req, res, next) => {
   }
 });
 
-//Endpoint to delete user payment
-app.delete('/api/users/:userId/userpayment', async (req, res, next) => {
+app.delete('/api/users/:userId/userpayment/:paymentId', async (req, res, next) => {
   try {
     await deleteUserPayment(req.params.userId, req.params.paymentId);
     res.sendStatus(204);
@@ -303,13 +200,195 @@ app.delete('/api/users/:userId/userpayment', async (req, res, next) => {
   }
 });
 
-// Endpoint to delete a product by ID
-app.delete('/api/products/:id', async (req, res, next) => {
+// Product endpoints
+app.post('/api/products', async (req, res, next) => {
   try {
-    await deleteProduct(req.params.id);
+    res.status(201).send(await createProduct(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/products', async (req, res, next) => {
+  try {
+    res.send(await fetchProducts());
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/products/:productId', async (req, res, next) => {
+  try {
+    res.send(await fetchProduct(req.params.productId));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.delete('/api/products/:productId', async (req, res, next) => {
+  try {
+    await deleteProduct(req.params.productId);
     res.sendStatus(204);
   } catch (ex) {
     next(ex);
+  }
+});
+
+// Product Category endpoints
+app.post('/api/productcategories', async (req, res, next) => {
+  try {
+    res.status(201).send(await createProductCategory(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/productcategories', async (req, res, next) => {
+  try {
+    res.send(await fetchProductCategories());
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// Product Inventory endpoints
+app.post('/api/productinventories', async (req, res, next) => {
+  try {
+    res.status(201).send(await createProductInventory(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/productinventories', async (req, res, next) => {
+  try {
+    res.send(await fetchProductInventories());
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// Cart Item endpoints
+app.post('/api/cartitems', isLoggedIn, async (req, res, next) => {
+  try {
+    res.status(201).send(await createCartItem(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/cartitems', isLoggedIn, async (req, res, next) => {
+  try {
+    res.send(await fetchCartItems());
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.delete('/api/cartitems/:productId', isLoggedIn ,async (req, res, next) => {
+  try {
+    await deleteCartItem(req.params.productId);
+    res.sendStatus(204);
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.put('/api/cartitems/:productId', isLoggedIn, async (req, res,next) => {
+  try {
+    res.send(await fetchCartItems(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// Order Item endpoints
+app.post('/api/orderitems', async (req, res, next) => {
+  try {
+    res.status(201).send(await createOrderItem(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/orderitems', async (req, res, next) => {
+  try {
+    res.send(await fetchOrderItems());
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// Order Item Detail endpoints
+app.post('/api/orderitems/:orderId/orderdetails', async (req, res, next) => {
+  try {
+    res.status(201).send(await createOrderDetail(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/orderitems/:orderId/orderdetails', async (req, res, next) => {
+  try {
+    res.send(await fetchOrderDetails(req.params.orderId));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// Payment Detail endpoints
+app.post('/api/orderitems/:orderId/orderdetails/paymentdetails', async (req, res, next) => {
+  try {
+    res.status(201).send(await createPaymentDetail(req.body));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.get('/api/orderitems/:orderId/orderdetails/paymentdetails', async (req, res, next) => {
+  try {
+    res.send(await fetchPaymentDetails(req.params.orderId));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// Delete endpoints
+app.delete('/api/users/:userId/addresses/:addressId', async (req, res, next) => {
+  try {
+    await deleteUserAddress(req.params.userId, req.params.addressId);
+    res.sendStatus(204);
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.delete('/api/users/:userId/payments/:paymentId', async (req, res, next) => {
+  try {
+    await deleteUserPayment(req.params.userId, req.params.paymentId);
+    res.sendStatus(204);
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+app.delete('/api/cartitems/:cartItemId', async (req, res, next) => {
+  try {
+    await deleteCartItem(req.params.cartItemId);
+    res.sendStatus(204);
+  } catch (ex) {
+    next(ex);
+  }
+});
+
+// Route to checkout and place an order
+app.post('/api/checkout', isLoggedIn, async (req, res, next) => {
+  try {
+    const { address, paymentMethod } = req.body;
+    const order = await checkout(req.user.user_id, address, paymentMethod);
+    res.status(201).json(order);
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -320,20 +399,47 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).send({ error: err.message ? err.message : err });
 });
 
+
 // Initialize the server
 const init = async () => {
-  const port = process.env.PORT || 3000;
+    const port = process.env.PORT || 3000;
 
-  // Connect to the database
-  await client.connect();
-  console.log('Connected to the database');
+    // Connect to the database
+    await client.connect();
+    console.log('Connected to the database');
 
-  // Create database tables
-  await createTables();
-  console.log('Tables created');
+    // Create database tables
+    await createTables();
+    console.log('Tables created');
 
-  // Start the server
-  app.listen(port, () => console.log(`Listening on port ${port}`));
+
+     // Create sample admin users
+  const adminUsers = await Promise.all([
+    createAdminUser({ admin_id: 1, username: 'admin1', password: 'admin1_password' }),
+    createAdminUser({ admin_id: 1, username: 'admin2', password: 'admin2_password' })
+  ]);
+
+  // Create sample regular users
+  const [user1, user2, user3] = await Promise.all([
+    createUser({ username: 'user1', email: 'user1@example.com', password: 'password1' }),
+    createUser({ username: 'user2', email: 'user2@example.com', password: 'password2' }),
+    createUser({ username: 'user3', email: 'user3@example.com', password: 'password3' })
+  ]);
+
+  // Create sample products
+  const [product1, product2, product3] = await Promise.all([
+    createProduct({ name: 'product1', description: 'Description of product1', price: 10.99 }),
+    createProduct({ name: 'product2', description: 'Description of product2', price: 19.99 }),
+    createProduct({ name: 'product3', description: 'Description of product3', price: 24.99 })
+  ]);
+
+  // Log admin users, regular users, and products
+  console.log('Admin Users:', adminUsers);
+  console.log('Regular Users:', [user1, user2, user3]);
+  console.log('Products:', [product1, product2, product3]);
+
+    // Start the server
+    app.listen(port, () => console.log(`Listening on port ${port}`));
 };
 
 // Call the initialization function

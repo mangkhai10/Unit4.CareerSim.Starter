@@ -9,7 +9,6 @@ const JWT = process.env.JWT || 'figures';
 const createTables = async () => {
     const SQL = `
       -- Drop existing tables if they exist
-      DROP TABLE IF EXISTS admin CASCADE;
       DROP TABLE IF EXISTS adminuser;
       DROP TABLE IF EXISTS users CASCADE;
       DROP TABLE IF EXISTS user_address;
@@ -22,18 +21,10 @@ const createTables = async () => {
       DROP TABLE IF EXISTS order_items;
       DROP TABLE IF EXISTS order_details CASCADE;
       DROP TABLE IF EXISTS payment_details;
-  
-      -- Create admin table
-      CREATE TABLE admin (
-        admin_id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL
-      );
-  
+
       -- Create adminuser table
       CREATE TABLE adminuser (
         adminuser_id SERIAL PRIMARY KEY,
-        admin_id INT REFERENCES admin(admin_id),
         username VARCHAR(50) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL
       );
@@ -117,24 +108,14 @@ const createTables = async () => {
     await client.query(SQL);
   };
   
-  
-// Function to create a new admin
-const createAdmin = async ({ username, password }) => {
-    const SQL = `
-      INSERT INTO admin (username, password) VALUES ($1, $2) RETURNING *
-    `;
-    const response = await client.query(SQL, [username, await bcrypt.hash(password, 10)]);
-    return response.rows[0];
-  };
 
-  // Function to create a new admin user
-const createAdminUser = async ({ admin_id, username, password }) => {
+  const createAdminUser = async ({username, password }) => {
     const SQL = `
-      INSERT INTO adminuser (admin_id, username, password) VALUES ($1, $2, $3) RETURNING *
+      INSERT INTO adminuser (username, password) VALUES ($1, $2) RETURNING *
     `;
-    const response = await client.query(SQL, [admin_id, username, await bcrypt.hash(password, 5)]);
+    const response = await client.query(SQL, [username, await bcrypt.hash(password, 5)]);
     return response.rows[0];
-  };
+};
 
   // Function to create a new user
 const createUser = async ({ username, email, password }) => {
@@ -345,7 +326,7 @@ const deleteCartItem = async (cartItemId) => {
 // Function to delete user addresses
 const deleteUserAddress = async (userAddress) => {
   const SQL = `
-    DELETE FROM user_address WHERE user_address_id = $1 RETURNING *
+    DELETE FROM user_address WHERE address_id = $1 RETURNING *
   `;
   const response = await client.query(SQL, [userAddress]);
   return response.rows[0];
@@ -354,7 +335,7 @@ const deleteUserAddress = async (userAddress) => {
 // Function to delete user payments
   const deleteUserPayment = async (userPayment) => {
     const SQL = `
-      DELETE FROM user_payment WHERE user_payment_id = $1 RETURNING *
+      DELETE FROM user_payment WHERE payment_id = $1 RETURNING *
     `;
     const response = await client.query(SQL, [userPayment]);
     return response.rows[0];
@@ -362,33 +343,34 @@ const deleteUserAddress = async (userAddress) => {
 
 // Function to find a user using their token
 const findUserWithToken = async (token) => {
-    let id;
-    try {
+  let userId;
+  try {
       const payload = await jwt.verify(token, JWT);
-      id = payload.id;
-    } catch (ex) {
+      userId = payload.user_id;
+  } catch (ex) {
       const error = Error('not authorized');
       error.status = 401;
       throw error;
-    }
-    const SQL = `
-      SELECT id, username FROM users WHERE id=$1;
-    `;
-    const response = await client.query(SQL, [id]);
-    if (!response.rows.length) {
+  }
+  const SQL = `
+      SELECT user_id, username FROM users WHERE user_id = $1;
+  `;
+  const response = await client.query(SQL, [userId]);
+  if (!response.rows.length) {
       const error = Error('not authorized');
       error.status = 401;
       throw error;
-    }
-    return response.rows[0];
-  };
+  }
+  return response.rows[0];
+};
+
 
   // Function for user authentication
-const authenticate = async ({ username, password }) => {
+  const authenticate = async ({ username, password }) => {
     const SQL = `
-      SELECT id, password
-     FROM users 
-     WHERE username=$1;
+      SELECT user_id, password
+      FROM users 
+      WHERE username=$1;
     `;
     const response = await client.query(SQL, [username]);
     if (!response.rows.length || (await bcrypt.compare(password, response.rows[0].password)) === false) {
@@ -396,13 +378,14 @@ const authenticate = async ({ username, password }) => {
       error.status = 401;
       throw error;
     }
-    const token = await jwt.sign({ id: response.rows[0].id }, JWT);
+    const token = await jwt.sign({ user_id: response.rows[0].user_id }, JWT); 
     return { token };
   };
 
   module.exports = {
     client,
     createTables,
+    createAdminUser, 
     createUser,
     createUserAddress,
     createUserPayment,
@@ -413,7 +396,6 @@ const authenticate = async ({ username, password }) => {
     createOrderItem,
     createOrderDetail,
     createPaymentDetail,
-    fetchAdmins,
     fetchAdminUsers,
     fetchUsers,
     fetchUserAddresses,
