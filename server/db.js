@@ -1,9 +1,10 @@
 // Import necessary modules
 const pg = require('pg');
+const uuid = require('uuid');
 const client = new pg.Client(process.env.DATABASE_URL || 'postgres://localhost/acme_Anime_Figures_db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const JWT = process.env.JWT || 'figures';
+const JWT = process.env.JWT || "shhh";
 
 // Function to create database tables
 const createTables = async () => {
@@ -26,12 +27,13 @@ const createTables = async () => {
       CREATE TABLE adminuser (
         adminuser_id SERIAL PRIMARY KEY,
         username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL
+        password VARCHAR(255) NOT NULL,
+        is_admin BOOLEAN DEFAULT FALSE
       );
   
       -- Create users table
       CREATE TABLE users (
-        user_id SERIAL PRIMARY KEY,
+        user_id UUID PRIMARY KEY,
         username VARCHAR(50) UNIQUE NOT NULL,
         email VARCHAR(100) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL
@@ -40,14 +42,14 @@ const createTables = async () => {
       -- Create user_address table
       CREATE TABLE user_address (
         address_id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(user_id),
+        user_id UUID REFERENCES users(user_id),
         address VARCHAR(255) NOT NULL
       );
   
       -- Create user_payment table
       CREATE TABLE user_payment (
         payment_id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(user_id),
+        user_id UUID REFERENCES users(user_id),
         payment_method VARCHAR(50) NOT NULL
       );
   
@@ -75,7 +77,7 @@ const createTables = async () => {
       -- Create cart_items table
       CREATE TABLE cart_items (
         cart_item_id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(user_id),
+        user_id UUID REFERENCES users(user_id),
         product_id INT REFERENCES products(product_id),
         quantity INT NOT NULL
       );
@@ -83,7 +85,7 @@ const createTables = async () => {
       -- Create order_items table
       CREATE TABLE order_items (
         order_item_id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(user_id),
+        user_id UUID REFERENCES users(user_id),
         product_id INT REFERENCES products(product_id),
         quantity INT NOT NULL
       );
@@ -91,7 +93,7 @@ const createTables = async () => {
       -- Create order_details table
       CREATE TABLE order_details (
         order_detail_id SERIAL PRIMARY KEY,
-        user_id INT REFERENCES users(user_id),
+        user_id UUID REFERENCES users(user_id),
         total_amount DECIMAL(10, 2) NOT NULL,
         status VARCHAR(20) DEFAULT 'pending'
       );
@@ -109,20 +111,20 @@ const createTables = async () => {
   };
   
 
-  const createAdminUser = async ({username, password }) => {
+  const createAdminUser = async ({ username, password ,is_admin }) => {
     const SQL = `
-      INSERT INTO adminuser (username, password) VALUES ($1, $2) RETURNING *
+    INSERT INTO adminuser (username, password, is_admin) VALUES ($1, $2, $3) RETURNING *
     `;
-    const response = await client.query(SQL, [username, await bcrypt.hash(password, 5)]);
+    const response = await client.query(SQL, [username, await bcrypt.hash(password, 5), is_admin]);
     return response.rows[0];
 };
 
   // Function to create a new user
 const createUser = async ({ username, email, password }) => {
     const SQL = `
-      INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING *
+      INSERT INTO users (user_id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING *
     `;
-    const response = await client.query(SQL, [username, email, await bcrypt.hash(password, 5)]);
+    const response = await client.query(SQL, [uuid.v4(),username, email, await bcrypt.hash(password, 5)]);
     return response.rows[0];
   };
   
@@ -209,14 +211,6 @@ const createPaymentDetail = async ({ user_id, payment_method, amount }) => {
     return response.rows[0];
   };
 
-  const fetchAdmins = async () => {
-    const SQL = `
-      SELECT * FROM admin
-    `;
-    const response = await client.query(SQL);
-    return response.rows;
-  };
-  
   const fetchAdminUsers = async () => {
     const SQL = `
       SELECT * FROM adminuser
@@ -353,7 +347,7 @@ const findUserWithToken = async (token) => {
       throw error;
   }
   const SQL = `
-      SELECT user_id, username FROM users WHERE user_id = $1;
+  SELECT user_id, username, email FROM users WHERE user_id = $1
   `;
   const response = await client.query(SQL, [userId]);
   if (!response.rows.length) {
@@ -363,7 +357,6 @@ const findUserWithToken = async (token) => {
   }
   return response.rows[0];
 };
-
 
   // Function for user authentication
   const authenticate = async ({ username, password }) => {

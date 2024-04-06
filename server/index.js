@@ -87,7 +87,7 @@ app.get('/api/auth/me', isLoggedIn, (req, res, next) => {
 
 // Admin endpoints
 
-app.get('/api/adminusers', async (req, res, next) => {
+app.get('/api/adminusers', isAdmin, async (req, res, next) => {
   try {
     res.send(await fetchAdminUsers());
   } catch (ex) {
@@ -102,6 +102,15 @@ app.put('/api/admin/users', isAdmin, async (req, res, next) => {
     next(ex);
   }
 });
+
+app.put('/api/admin/users/:userId', isAdmin, async (req, res, next) => {
+  try {
+    res.send(await fetchUser(req.params.userId));
+  } catch (ex) {
+    next(ex);
+  }
+});
+
 app.get('/api/admin/products', isAdmin, async (req, res, next) => {
   try {
     res.send(await fetchProducts());
@@ -413,11 +422,11 @@ const init = async () => {
     console.log('Tables created');
 
 
-     // Create sample admin users
-  const adminUsers = await Promise.all([
-    createAdminUser({ admin_id: 1, username: 'admin1', password: 'admin1_password' }),
-    createAdminUser({ admin_id: 1, username: 'admin2', password: 'admin2_password' })
-  ]);
+// Create sample admin users
+const adminUsers = await Promise.all([
+  createAdminUser({ admin_id: 1, username: 'admin1', password: 'admin1_password', is_admin: true }),
+  createAdminUser({ admin_id: 2, username: 'admin2', password: 'admin2_password', is_admin: true })
+]);
 
   // Create sample regular users
   const [user1, user2, user3] = await Promise.all([
